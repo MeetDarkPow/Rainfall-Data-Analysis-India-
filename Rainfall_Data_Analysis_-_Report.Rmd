@@ -1,0 +1,179 @@
+---
+title: "Rainfall Data Analysis"
+author: "Meet Bhatnagar and Digvijay Singh"
+date: "07/06/2019"
+output: pdf_document
+---
+
+# Analysis of 111 years of Rainfall Data from 596 districts of India.
+
+```{r,echo=FALSE,warning=FALSE,error=FALSE,message=FALSE,cache=TRUE}
+#---------------------------------------------------------------------------------------------------------------------------------------------------------
+# Reading in Data as data frame, converting into Time series.
+#---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Loading library "readxl" for reading in .xlsx file via R.
+# Loading library "openxlsx" for writing in .xlsx file via R.
+library(readxl)
+library(openxlsx)
+
+# Data from file is stored in the data frame named as 'Intermediate'.
+# "read_excel" function of "readxl" library is used.
+Intermediate<-read_excel("Rainfall_Data_(111_years).xlsx")
+
+# Removing NA values from 'Intermediate'.
+Intermediate<-na.omit(Intermediate)
+
+# Finding names of each district seperately using "unique" function.
+Unique<-unique(Intermediate$DIST)
+
+# "which" function is used to find the row number for which certain value is present in the data frame.
+# This function can be used to create subset of data for each district.
+# In order to view an example for showing the working of "which" function, remove hash from the following snippet.
+# Intermediate[which(Intermediate$DIST==Unique[1])[1]:which(Intermediate$DIST==Unique[1])[length(which(Intermediate$DIST==Unique[1]))],]
+
+# Creating a folder for storing all .xlsx files having data for each district seperately.
+dir.create("Intermediate")
+
+# Creating loop for writing an excel file with a particular district data.
+for(i in 1:length(Unique))
+{
+  write.xlsx(Intermediate[which(Intermediate$DIST==Unique[i])[1]:which(Intermediate$DIST==Unique[i])[length(which(Intermediate$DIST==Unique[i]))],-1:-3],
+  file=paste0("Intermediate/Intermediate_",i,".xlsx"),
+  sheetName = Unique[i], col.names = TRUE, row.names = TRUE, append = TRUE)
+}
+
+# Reading each file and changing its rownames with years.
+# Removing all "WC" data.
+# Storing each district's data in a separate data frame having the name of that particular district.
+for(j in 1:length(Unique))
+{
+  Data<-read_excel(paste0("Intermediate/Intermediate_",j,".xlsx"))
+  Data<-as.data.frame(Data)
+  row.names(Data)<-Intermediate$Year[1:length(row.names(Data))]
+  Data<-Data[,-1]
+  assign(Unique[j],Data)
+}
+
+# Deleting "Intermediate" directory.
+unlink("Intermediate",recursive=T)
+```
+
+## Analysis of Annual, Monthwise Rainfall Data and Deviation of Annual rainfall from Normal rainfall for each district. And analysis of Above and Below Normal Rainfall values for each district per year.
+
+```{r,echo=FALSE,warning=FALSE,error=FALSE,message=FALSE,cache=TRUE}
+#---------------------------------------------------------------------------------------------------------------------------------------------------------
+# Plotting of -
+# 1) Monthwise data 
+# 2) Annual data 
+# 3) 30 year moving average estimation 
+# 4) deviation of actual rainfall from 30 year moving average using Annual rainfall data 
+# for each district .
+#---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Creating a folder for storing all analysis charts for each district seperately.
+dir.create("Analysis")
+for(k in 1:length(Unique))
+{
+  # Creating a folder for each district.
+  dir.create(paste0("Analysis/",Unique[k]))
+}
+
+# Converting each data frame containing district rainfall data into time series and plotting its graph.
+library(pracma)
+for(l in 1:length(Unique))
+{
+  Data<-eval(parse(text=paste0("`",Unique[l],"`")))
+  # For plotting monthwise.
+  Month<-Data
+  Month<-(as.vector(t(as.matrix(Month[,-13:-18]))))
+  Month<-ts(Month,frequency=12,start=Intermediate$Year[1],end=Intermediate$Year[length(Intermediate$Year)])
+  
+  # For plotting Annual Rainfall.
+  Annual<-Data
+  Annual<-(as.vector(t(as.matrix(Annual[,13]))))
+  Annual<-ts(Annual,frequency=1,start=Intermediate$Year[1],end=Intermediate$Year[length(Intermediate$Year)])
+  
+  #Plotting graphs.
+  plot(Month,main=paste0(Unique[l]," - Monthwise"),ylab="Rainfall in mm")
+  plot(Annual,main=paste0(Unique[l]," - Annual"),ylab="Rainfall in mm")
+  plot(movavg(Annual,n=30),type="l",ylab="Rainfall in mm",main=paste0("Moving Average for 30 years - ",Unique[l]),xlab="Period (Number of years from 1901)")
+  plot(Annual-movavg(Annual,n=30),type="l",ylab="Rainfall in mm",main=paste0("Deviation of Actual Rainfall from 30 years Moving Average - ",Unique[l]),xlab="Period (Number of years from 1901)")
+#----------------------------------------------------------------------------
+# Again creating dataframes each having a seperate district data with the same name as the respective district.
+Data<-eval(parse(text=paste0("`",Unique[l],"`")))[13]
+# Finding normal rainfall value.
+Normal<-sum(Data)/length(Data$WC13)
+Data$Frequency<-c(0)
+for(p in 1:length(rownames(Data)))
+  {
+    if(Data$WC13[p]>=(Normal*1.1))
+    {
+      Data$Frequency[p]=1
+    }
+    else if(Data$WC13[p]<=(Normal*0.9))
+    {
+      Data$Frequency[p]=-1
+    }
+  }
+plot(Data$WC13,type="l",main=paste0("Above & Below Normal Rainfall and its Frequency - ",Unique[l]),ylab="Rainfall in mm",xlab="Period (Number of years past 1901)")
+  points(Data$WC13,col=ifelse(Data$Frequency==1,"Red",ifelse(Data$Frequency==0,"Black","Blue")),pch=20)
+  abline(h=Normal*1.1,col="Red")
+  abline(h=Normal*0.9,col="Blue")
+  legend('bottomleft',horiz=TRUE,c(paste0("Above Normal Frequency - ",sum(Data$Frequency==1,na.rm=TRUE)," years"),
+         paste0("Below Normal Frequency - ",sum(Data$Frequency==-1,na.rm=TRUE)," years")),cex=.7,
+         fill=c("red","blue"),bty='n')
+}
+```
+
+## Analysis of percentage of districts having Above and Below normal rainfall for each year.
+
+```{r,echo=FALSE,warning=FALSE,error=FALSE,message=FALSE,cache=TRUE}
+# Creating vector for storing all normal rainfall values for each district.
+Normal_Rainfall<-vector(mode='numeric',length=length(Unique))
+for(q in 1:length(Unique))
+{
+  Temp<-eval(parse(text=paste0("`",Unique[q],"`")))[13]
+  Normal_Rainfall[q]=sum(Temp$WC13)/length(Temp$WC13)
+}
+# Converting into a data frame.
+Normal_Rainfall<-as.data.frame(Normal_Rainfall)
+rownames(Normal_Rainfall)<-Unique
+# Adding frequency of districts having above and below normal rainfall for all years.
+for(r in 1:length(rownames(Data)))
+{
+  Frequency<-vector(mode='numeric',length=length(Unique))
+  for(s in 1:length(Unique))
+  {
+    if(((eval(parse(text=paste0("`",Unique[s],"`")))$WC13[r]))>=(Normal_Rainfall$Normal_Rainfall[s]*1.1))
+    {
+      Frequency[s]=1
+    }
+    else if(((eval(parse(text=paste0("`",Unique[s],"`")))$WC13[r]))<=(Normal_Rainfall$Normal_Rainfall[s]*0.9))
+    {
+      Frequency[s]=-1
+    }
+  }
+  Normal_Rainfall[paste0(rownames(Data)[r])]<-Frequency
+}
+Normal_Rainfall<-Normal_Rainfall[,-1]
+Above_Normal<-vector(mode='numeric',length=length(rownames(Data)))
+Below_Normal<-vector(mode='numeric',length=length(rownames(Data)))
+for(t in 1:length(rownames(Data)))
+{
+  Above_Normal[t]=(sum(Normal_Rainfall[,t]==1,na.rm=T)/length(Unique))*100
+  Below_Normal[t]=(sum(Normal_Rainfall[,t]==-1,na.rm=T)/length(Unique))*100
+}
+Above_Normal<-as.data.frame(Above_Normal)
+rownames(Above_Normal)<-rownames(Data)
+Below_Normal<-as.data.frame(Below_Normal)
+rownames(Below_Normal)<-rownames(Data)
+# Saving plot on percentage of districts having above and below normal rainfall for each year.
+plot(ts(Above_Normal,start=as.numeric(rownames(Above_Normal)[1]),
+     end=as.numeric(rownames(Above_Normal)[length(rownames(Above_Normal))])),
+     main="Percentage of districts having above normal rainfall",ylab="Percentage of Districts",xlab="Years",col="Red")
+
+plot(ts(Below_Normal,start=as.numeric(rownames(Below_Normal)[1]),
+     end=as.numeric(rownames(Below_Normal)[length(rownames(Below_Normal))])),
+     main="Percentage of districts having below normal rainfall",ylab="Percentage of Districts",xlab="Years",col="Blue")
+```
